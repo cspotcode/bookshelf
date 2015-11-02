@@ -1,3 +1,9 @@
+require 'json'
+
+DB_CONFIG    = JSON.load(File.read('test/integration/helpers/config.json'))
+PACKAGES     = %w{build-essential mysql-server postgresql libpq-dev sqlite3}
+NODE_VERSION = '5.0.0'
+
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
@@ -20,20 +26,20 @@ Vagrant.configure(2) do |config|
 
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
 
-    ### upgrade already-installed packages
+    # Disable interactive prompts during package installation.
+    export DEBIAN_FRONTEND=noninteractive
+
     sudo apt-get update
 
-    ### Install MySQL, PostgreSQL, and other dependencies
-
     # Set a password to avoid interactive password prompt during installation
-    sudo debconf-set-selections <<< 'mysql-server mysql-server/root_password password asdf'
-    sudo debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password asdf'
+    sudo debconf-set-selections <<< "mysql-server mysql-server/root_password password asdf"
+    sudo debconf-set-selections <<< "mysql-server mysql-server/root_password_again password asdf"
 
     sudo apt-get -y install mysql-server mysql-client postgresql postgresql-client g++
 
     ### Set up MySQL
     # Disable root password
-    mysql -u root -pasdf -e "SET PASSWORD FOR root@localhost=PASSWORD('');"
+    #mysql -u root -pasdf -e "SET PASSWORD FOR root@localhost=PASSWORD('');"
     # Create database for bookshelf test suite
     mysql -u root -e "CREATE DATABASE bookshelf_test;"
 
@@ -48,8 +54,7 @@ END
     curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.29.0/install.sh | bash
     eval "`cat ~/.bashrc`"
     nvm install stable
-    # LTS version
-    nvm install 4.2.1
+    nvm install 4.2.1 # LTS version
     nvm use stable
     nvm alias default stable
 
