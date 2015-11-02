@@ -10,3 +10,4 @@ build/
 index.html
 docs/
 .jsdoc-temp/
+.vagrant
