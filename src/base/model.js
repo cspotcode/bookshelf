@@ -1,16 +1,13 @@
 // Base Model
 // ---------------
-import _, { assign, identity, mapKeys, mapValues } from 'lodash';
-import { clone } from 'lodash/lang';
-import inherits from 'inherits';
+var _        = require('lodash');
+var inherits = require('inherits');
 
-import Events from './events';
-
-const PIVOT_PREFIX = '_pivot_';
-const DEFAULT_TIMESTAMP_KEYS = ['created_at', 'updated_at'];
+var Events   = require('./events');
+var slice    = Array.prototype.slice
 
 // List of attributes attached directly from the `options` passed to the constructor.
-const modelProps = ['tableName', 'hasTimestamps'];
+var modelProps = ['tableName', 'hasTimestamps'];
 
 /**
  * @class
@@ -23,7 +20,7 @@ const modelProps = ['tableName', 'hasTimestamps'];
  * standard interface from which other objects may inherit.
  */
 function ModelBase(attributes, options) {
-  let attrs = attributes || {};
+  var attrs = attributes || {};
   options   = options    || {};
   this.attributes = Object.create(null);
   this._reset();
@@ -56,7 +53,7 @@ ModelBase.prototype.initialize = function() {};
 
 /**
  * @name ModelBase#tableName
- * @member {string}
+ * @member {string} 
  * @description
  *
  * A required property for any database usage, The
@@ -90,8 +87,8 @@ ModelBase.prototype.idAttribute = 'id';
  * @default false
  * @description
  *
- * Sets the current date/time on the timestamps columns `created_at` and
- * `updated_at` for a given method.  'insert' method will only update
+ * Sets the current date/time on the timestamps columns `created_at` and 
+ * `updated_at` for a given method.  'insert' method will only update 
  * `updated_at`.  To override the default column names, assign an array
  * to {@link Model#hasTimestamps hasTimestamps}.  The first element will
  * be the created column name and the second will be the updated
@@ -128,7 +125,7 @@ ModelBase.prototype.get = function(attr) {
  */
 ModelBase.prototype.set = function(key, val, options) {
   if (key == null) return this;
-  let attrs;
+  var attrs;
 
   // Handle both `"key", value` and `{key: value}` -style arguments.
   if (typeof key === 'object') {
@@ -137,18 +134,18 @@ ModelBase.prototype.set = function(key, val, options) {
   } else {
     (attrs = {})[key] = val;
   }
-  options = clone(options) || {};
+  options = _.clone(options) || {};
 
   // Extract attributes and options.
-  const unset   = options.unset;
-  const current = this.attributes;
-  const prev    = this._previousAttributes;
+  var unset   = options.unset;
+  var current = this.attributes;
+  var prev    = this._previousAttributes;
 
   // Check for changes of `id`.
   if (this.idAttribute in attrs) this.id = attrs[this.idAttribute];
 
   // For each `set` attribute, update or delete the current value.
-  for (const attr in attrs) {
+  for (var attr in attrs) {
     val = attrs[attr];
     if (!_.isEqual(prev[attr], val)) {
       this.changed[attr] = val;
@@ -175,7 +172,7 @@ ModelBase.prototype.set = function(key, val, options) {
  *
  * var modelA = new bookshelf.Model();
  * modelA.isNew(); // true
- *
+ * 
  * var modelB = new bookshelf.Model({id: 1});
  * modelB.isNew(); // false
  */
@@ -212,29 +209,22 @@ ModelBase.prototype.isNew = function() {
  * @param {bool}    [options.omitPivot=false] Exclude pivot values.
  * @returns {Object} Serialized model as a plain object.
  */
-ModelBase.prototype.serialize = function(
-  { shallow = false, omitPivot = false, ...rest } = {}
-) {
-
-  const { attributes } = this;
-
-  if (!shallow) {
-
-    const relations = mapValues(this.relations, (relation, key) =>
-      relation.toJSON != null
-        ? relation.toJSON({ shallow, omitPivot, ...rest })
-        : relation
-    );
-
-    const pivot = this.pivot && !omitPivot && this.pivot.attributes;
-    const pivotAttributes = mapKeys(pivot, (value, key) =>
-      `${PIVOT_PREFIX}${key}`
-    );
-
-    return { ...attributes, ...relations, ...pivotAttributes };
+ModelBase.prototype.serialize = function(options) {
+  var attrs = _.clone(this.attributes);
+  if (options && options.shallow) return attrs;
+  var relations = this.relations;
+  for (var key in relations) {
+    var relation = relations[key];
+    attrs[key] = relation.toJSON ? relation.toJSON(options) : relation;
   }
-
-  return { ...attributes };
+  if (options && options.omitPivot) return attrs;
+  if (this.pivot) {
+    var pivot = this.pivot.attributes;
+    for (key in pivot) {
+      attrs['_pivot_' + key] = pivot[key];
+    }
+  }
+  return attrs;  
 }
 
 /**
@@ -249,7 +239,7 @@ ModelBase.prototype.serialize = function(
  * @param {Object=} options Options passed to {@link Model#serialize}.
  */
 ModelBase.prototype.toJSON = function(options) {
-  return this.serialize(options);
+  return this.serialize(options)
 };
 
 /**
@@ -310,7 +300,9 @@ ModelBase.prototype.has = function(attr) {
  * @param {Object} response Hash of attributes to parse.
  * @returns {Object} Parsed attributes.
  */
-ModelBase.prototype.parse = identity;
+ModelBase.prototype.parse = function(resp) {
+  return resp;
+};
 
 /**
  * @method
@@ -332,8 +324,9 @@ ModelBase.prototype.unset = function(attr, options) {
  * @returns {Model} This model.
  */
 ModelBase.prototype.clear = function(options) {
-  const undefinedKeys = mapValues(this.attributes, () => undefined);
-  return this.set(undefinedKeys, { ...options, unset: true });
+  var attrs = {};
+  for (var key in this.attributes) attrs[key] = void 0;
+  return this.set(attrs, _.extend({}, options, {unset: true}));
 };
 
 /**
@@ -348,7 +341,9 @@ ModelBase.prototype.clear = function(options) {
  * @param {Object} attributes The attributes to be converted.
  * @returns {Object} Formatted attributes.
  */
-ModelBase.prototype.format = identity;
+ModelBase.prototype.format = function(attrs) {
+  return attrs;
+};
 
 /**
  * @method
@@ -389,10 +384,13 @@ ModelBase.prototype.related = function(name) {
  * @returns {Model} Cloned instance of this model.
  */
 ModelBase.prototype.clone = function() {
-  const model = new this.constructor(this.attributes);
-  assign(model.relations, mapValues(this.relations, r => r.clone()));
-  model._previousAttributes = clone(this._previousAttributes);
-  model.changed = clone(this.changed);
+  var model = new this.constructor(this.attributes);
+  var relations = this.relations;
+  for (var key in relations) {
+    model.relations[key] = relations[key].clone();
+  }
+  model._previousAttributes = _.clone(this._previousAttributes);
+  model.changed = _.clone(this.changed);
   return model;
 };
 
@@ -408,16 +406,9 @@ ModelBase.prototype.clone = function() {
  *
  * @returns {string} Either `'insert'` or `'update'`.
  */
-ModelBase.prototype.saveMethod = function({ method = null, patch = false } = {}) {
-  if (patch) {
-    if (method == 'insert') throw new TypeError(
-      `Cannot accept incompatible options: methods=${method}, patch=${patch}`
-    );
-    method = 'update';
-  }
-  return (patch && 'update' || method) == null
-    ? this.isNew() ? 'insert' : 'update'
-    : method.toLowerCase();
+ModelBase.prototype.saveMethod = function(options) {
+  var method = options && options.method && options.method.toLowerCase();
+  return method || (this.isNew(options) ? 'insert' : 'update');
 };
 
 /**
@@ -432,7 +423,7 @@ ModelBase.prototype.saveMethod = function({ method = null, patch = false } = {})
  * timestamps.
  *
  * @param {Object=} options
- * @param {string} [options.method="update"]
+ * @param {string} [options.method]
  *   Either `'insert'` or `'update'`. Specify what kind of save the attribute
  *   update is for.
  *
@@ -441,14 +432,12 @@ ModelBase.prototype.saveMethod = function({ method = null, patch = false } = {})
 ModelBase.prototype.timestamp = function(options) {
   if (!this.hasTimestamps) return {};
 
-  const now          = new Date();
-  const attributes   = {};
-  const method       = this.saveMethod(options);
-  const keys = _.isArray(this.hasTimestamps)
-    ? this.hasTimestamps
-    : DEFAULT_TIMESTAMP_KEYS;
-
-  const [ createdAtKey, updatedAtKey ] = keys;
+  var now          = new Date();
+  var attributes   = {};
+  var method       = this.saveMethod(options);
+  var keys         = _.isArray(this.hasTimestamps) ? this.hasTimestamps : ['created_at', 'updated_at'];
+  var createdAtKey = keys[0];
+  var updatedAtKey = keys[1];
 
   if (updatedAtKey) {
     attributes[updatedAtKey] = now;
@@ -472,7 +461,7 @@ ModelBase.prototype.timestamp = function(options) {
  * Model#destroy destroy}. If an attribute is passed, returns true only if that
  * specific attribute has changed.
  *
- * @param {string=} attribute
+ * @param {string=} attribute 
  * @returns {bool}
  * `true` if any attribute has changed. Or, if `attribute` was specified, true
  * if it has changed.
@@ -552,12 +541,14 @@ ModelBase.prototype._reset = function() {
  * @see http://lodash.com/docs/#omit
  */
 // "_" methods that we want to implement on the Model.
-const modelMethods = ['keys', 'values', 'pairs', 'invert', 'pick', 'omit'];
+var modelMethods = ['keys', 'values', 'pairs', 'invert', 'pick', 'omit'];
 
 // Mix in each "_" method as a proxy to `Model#attributes`.
 _.each(modelMethods, function(method) {
-  ModelBase.prototype[method] = function(...args) {
-    return _[method](this.attributes, ...args);
+  ModelBase.prototype[method] = function() {
+    var args = slice.call(arguments);
+    args.unshift(this.attributes);
+    return _[method].apply(_, args);
   };
 });
 
@@ -573,23 +564,23 @@ _.each(modelMethods, function(method) {
  *     var checkit  = require('checkit');
  *     var Promise  = require('bluebird');
  *     var bcrypt   = Promise.promisifyAll(require('bcrypt'));
- *
+ *     
  *     var Customer = bookshelf.Model.extend({
- *
+ *     
  *       initialize: function() {
  *         this.on('saving', this.validateSave);
  *       },
- *
+ *     
  *       validateSave: function() {
  *         return checkit(rules).run(this.attributes);
  *       },
- *
+ *     
  *       account: function() {
  *         return this.belongsTo(Account);
  *       },
- *
+ *     
  *     }, {
- *
+ *     
  *       login: Promise.method(function(email, password) {
  *         if (!email || !password) throw new Error('Email and password are both required');
  *         return new this({email: email.toLowerCase().trim()}).fetch({require: true}).tap(function(customer) {
@@ -599,9 +590,9 @@ _.each(modelMethods, function(method) {
  *            });
  *         });
  *       })
- *
+ *     
  *     });
- *
+ *     
  *     Customer.login(email, password)
  *       .then(function(customer) {
  *         res.json(customer.omit('password'));
